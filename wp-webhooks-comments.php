@@ -1324,6 +1324,7 @@ $return_args = array(
 				}
 
 				if( $is_valid ){
+					$data_array = apply_filters( 'wpwhpro/webhooks/trigger_create_comment_results', $data_array, $comment, $comment_id );			
 					$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
 				}
 			}
