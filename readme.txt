@@ -1,11 +1,11 @@
-=== Name: WP Webhooks - Comments ===
+=== WP Webhooks - Comments ===
 Author URI: https://ironikus.com/
 Plugin URI: https://ironikus.com/downloads/wp-webhooks-comments/
 Contributors: ironikus
 Donate link: https://paypal.me/ironikus
 Tags: webhooks, comments, automation, ironikus, edit comment
 Requires at least: 4.7
-Tested up to: 5.2.2
+Tested up to: 5.6
 Stable Tag: 1.0.0
 License: GNU Version 3 or Any Later Version
 
