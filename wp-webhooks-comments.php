@@ -3,7 +3,7 @@
  * Plugin Name: WP Webhooks - Comments
  * Plugin URI: https://ironikus.com/downloads/wp-webhooks-comments/
  * Description: A WP Webhooks and WP Webhooks Pro extension for handling comments
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Ironikus
  * Author URI: https://ironikus.com/
  * License: GPL2
@@ -19,14 +19,57 @@ if( !class_exists( 'WP_Webhooks_Comments' ) ){
 
 	class WP_Webhooks_Comments{
 
+		private $wpc_use_new_filter = null;
+
 		public function __construct() {
 
-			add_action( 'wpwhpro/webhooks/add_webhooks_actions', array( $this, 'add_webhook_actions' ), 20, 3 );
+			if( $this->wpwh_use_new_action_filter() ){
+				add_filter( 'wpwhpro/webhooks/add_webhook_actions', array( $this, 'add_webhook_actions' ), 20, 4 );
+			} else {
+				add_action( 'wpwhpro/webhooks/add_webhooks_actions', array( $this, 'add_webhook_actions' ), 20, 3 );
+			}
 			add_filter( 'wpwhpro/webhooks/get_webhooks_actions', array( $this, 'add_webhook_actions_content' ), 20 );
 
 			// Setup triggers
 			add_action( 'plugins_loaded', array( $this, 'add_webhook_triggers' ), 20 );
 			add_filter( 'wpwhpro/webhooks/get_webhooks_triggers', array( $this, 'add_webhook_triggers_content' ), 20 );
+		}
+
+		/**
+		 * ######################
+		 * ###
+		 * #### HELPERS
+		 * ###
+		 * ######################
+		 */
+
+		public function wpwh_use_new_action_filter(){
+
+			if( $this->wpc_use_new_filter !== null ){
+				return $this->wpc_use_new_filter;
+			}
+
+			$return = false;
+			$version_current = '0';
+			$version_needed = '0';
+	
+			if( defined( 'WPWHPRO_VERSION' ) ){
+				$version_current = WPWHPRO_VERSION;
+				$version_needed = '4.1.0';
+			}
+	
+			if( defined( 'WPWH_VERSION' ) ){
+				$version_current = WPWH_VERSION;
+				$version_needed = '3.1.0';
+			}
+	
+			if( version_compare( (string) $version_current, (string) $version_needed, '>=') ){
+				$return = true;
+			}
+
+			$this->wpr_use_new_filter = $return;
+
+			return $return;
 		}
 
 		/**
@@ -64,34 +107,50 @@ if( !class_exists( 'WP_Webhooks_Comments' ) ){
 		 * @param $webhook - The webhook itself
 		 * @param $api_key - an api_key if defined
 		 */
-		public function add_webhook_actions( $action, $webhook, $api_key ){
+		public function add_webhook_actions( $response, $action, $webhook, $api_key = '' ){
 
-			$active_webhooks = WPWHPRO()->settings->get_active_webhooks();
+			//Backwards compatibility prior 4.1.0 (wpwhpro) or 3.1.0 (wpwh)
+			if( ! $this->wpwh_use_new_action_filter() ){
+				$api_key = $webhook;
+				$webhook = $action;
+				$action = $response;
 
-			$available_actions = $active_webhooks['actions'];
+				$active_webhooks = WPWHPRO()->settings->get_active_webhooks();
+				$available_actions = $active_webhooks['actions'];
+
+				if( ! isset( $available_actions[ $action ] ) ){
+					return $response;
+				}
+			}
+
+			$return_data = null;
 
 			switch( $action ){
 				case 'create_comment':
-					if( isset( $available_actions['create_comment'] ) ){
-						$this->action_create_comment();
-					}
+					$return_data = $this->action_create_comment();
 					break;
 				case 'update_comment':
-					if( isset( $available_actions['update_comment'] ) ){
-						$this->action_create_comment( true );
-					}
+					$return_data = $this->action_create_comment( true );
 					break;
 				case 'trash_comment':
-					if( isset( $available_actions['trash_comment'] ) ){
-						$this->action_trash_comment( true );
-					}
+					$return_data = $this->action_trash_comment( true );
 					break;
 				case 'delete_comment':
-					if( isset( $available_actions['delete_comment'] ) ){
-						$this->action_delete_comment( true );
-					}
+					$return_data = $this->action_delete_comment( true );
 					break;
 			}
+
+			//Make sure we only fire the response in case the old logic is used
+			if( $return_data !== null && ! $this->wpwh_use_new_action_filter() ){
+				WPWHPRO()->webhook->echo_response_data( $return_data );
+				die();
+			}
+
+			if( $return_data !== null ){
+				$response = $return_data;
+			}
+			
+			return $response;
 		}
 
 		public function action_create_comment_content(){
@@ -398,9 +457,7 @@ $return_args = array(
 				} else {
 					$return_args['msg'] = WPWHPRO()->helpers->translate("A comment id is required to update the comment.", 'action-' . $textdomain_context );
 
-					WPWHPRO()->webhook->echo_response_data( $return_args );
-
-					die();
+					return $return_args;
 				}
 			}
 
@@ -573,9 +630,7 @@ $return_args = array(
 				do_action( $do_action, $comment_id, $commentdata, $return_args );
 			}
 
-			WPWHPRO()->webhook->echo_response_data( $return_args );
-
-			die();
+			return $return_args;
 		}
 
 		/**
@@ -677,9 +732,7 @@ $return_args = array(
 			if( empty( $comment_id ) ){
 				$return_args['msg'] = WPWHPRO()->helpers->translate("A comment id is required to trash the comment.", 'action-' . $textdomain_context );
 
-				WPWHPRO()->webhook->echo_response_data( $return_args );
-
-				die();
+				return $return_args;
 			}
  
 			$return_args['data']['comment_id'] = $comment_id;
@@ -697,9 +750,7 @@ $return_args = array(
 				do_action( $do_action, $comment_id, $trashed, $return_args );
 			}
 
-			WPWHPRO()->webhook->echo_response_data( $return_args );
-
-			die();
+			return $return_args;
 		}
 
 		public function action_delete_comment() {
@@ -725,9 +776,7 @@ $return_args = array(
 			if( empty( $comment_id ) ){
 				$return_args['msg'] = WPWHPRO()->helpers->translate("A comment id is required to delete the comment.", 'action-' . $textdomain_context );
 
-				WPWHPRO()->webhook->echo_response_data( $return_args );
-
-				die();
+				return $return_args;
 			}
  
 			$return_args['data']['comment_id'] = $comment_id;
@@ -752,9 +801,7 @@ $return_args = array(
 				do_action( $do_action, $comment_id, $deleted, $return_args );
 			}
 
-			WPWHPRO()->webhook->echo_response_data( $return_args );
-
-			die();
+			return $return_args;
 		}
 
 		/**
@@ -1324,7 +1371,13 @@ $return_args = array(
 				}
 
 				if( $is_valid ){
-					$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					$webhook_url_name = ( is_array($webhook) && isset( $webhook['webhook_url_name'] ) ) ? $webhook['webhook_url_name'] : null;
+
+					if( $webhook_url_name !== null ){
+						$response_data[ $webhook_url_name ] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					} else {
+						$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					}
 				}
 			}
 
@@ -1403,7 +1456,13 @@ $return_args = array(
 				}
 
 				if( $is_valid ){
-					$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					$webhook_url_name = ( is_array($webhook) && isset( $webhook['webhook_url_name'] ) ) ? $webhook['webhook_url_name'] : null;
+
+					if( $webhook_url_name !== null ){
+						$response_data[ $webhook_url_name ] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					} else {
+						$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					}
 				}
 			}
 
@@ -1480,7 +1539,13 @@ $return_args = array(
 				}
 
 				if( $is_valid ){
-					$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					$webhook_url_name = ( is_array($webhook) && isset( $webhook['webhook_url_name'] ) ) ? $webhook['webhook_url_name'] : null;
+
+					if( $webhook_url_name !== null ){
+						$response_data[ $webhook_url_name ] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					} else {
+						$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					}
 				}
 			}
 
@@ -1556,7 +1621,13 @@ $return_args = array(
 				}
 
 				if( $is_valid ){
-					$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					$webhook_url_name = ( is_array($webhook) && isset( $webhook['webhook_url_name'] ) ) ? $webhook['webhook_url_name'] : null;
+
+					if( $webhook_url_name !== null ){
+						$response_data[ $webhook_url_name ] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					} else {
+						$response_data[] = WPWHPRO()->webhook->post_to_webhook( $webhook, $data_array );
+					}
 				}
 			}
 
